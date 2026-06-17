@@ -141,13 +141,18 @@ function Write-Log {
           if ($AdditionalFields) {
             $EventInstance = [System.Diagnostics.EventInstance]::new($EventLogId, $EventLogCategory, $Level)
             $NewEvent = [System.Diagnostics.EventLog]::new()
-            $NewEvent.Log = $EventLogName
-            $NewEvent.Source = $EventLogSource
-            [Array] $JoinedMessage = @(
-            $Message
-            $AdditionalFields | ForEach-Object { $_ }
-            )
-            $NewEvent.WriteEvent($EventInstance, $JoinedMessage)
+            # FIX 1.1: EventLog implements IDisposable - use try/finally to prevent handle leak in long-running service
+            try {
+              $NewEvent.Log = $EventLogName
+              $NewEvent.Source = $EventLogSource
+              [Array] $JoinedMessage = @(
+              $Message
+              $AdditionalFields | ForEach-Object { $_ }
+              )
+              $NewEvent.WriteEvent($EventInstance, $JoinedMessage)
+            } finally {
+              $NewEvent.Dispose()
+            }
           } else {
             #Write log to event viewer (Enabled by default)
             Write-EventLog -LogName $EventLogName -Source $EventLogSource -EventId $EventLogId -EntryType $Level -Category $EventLogCategory -Message "$Message"
@@ -328,6 +333,9 @@ if ($Configuration) {
             Write-Log -Message "API started - Listening on '$($IP):$($Port)' (Protocol: $Protocol)"
         }
         
+        # FIX 1.3: Wrap listener lifecycle in try/finally to ensure HttpListener is always stopped/closed,
+        # even if an unhandled exception occurs inside the request processing loop
+        try {
         while (($listener.IsListening) -and ($keepListening)) {
             # Default return
             $statusCode = [System.Net.HttpStatusCode]::OK
@@ -358,6 +366,9 @@ if ($Configuration) {
             
             # If local, we don't support authentication for now (TO IMPROVE)
             if ($request.IsLocal -or $Authenticated) {
+              # FIX 3.5: Wrap request processing in try/catch so a single failed request
+              # doesn't crash the entire API listener (e.g. ConvertTo-Json or Get-BgpPeer error)
+              try {
                 # Log every api request
                 # [string]$FullRequest = $request | Format-List * | Out-String
                 # Write-Log "API request received: $FullRequest" -EventLogSource 'WinBGP-API'
@@ -514,6 +525,13 @@ if ($Configuration) {
                         }
                         elseif ($FullPath -like 'api/*') {
                             $RouteName = $request.QueryString.Item("RouteName")
+                            # FIX 2.2: Validate RouteName input to prevent injection via API query strings
+                            # Only allow alphanumeric characters, hyphens, underscores and dots
+                            if ($RouteName -and $RouteName -notmatch '^[a-zA-Z0-9_\-\.]+$') {
+                                Write-Log "API rejected invalid RouteName '$RouteName' from '$RequestHost'" -Level Warning
+                                $statusCode = [System.Net.HttpStatusCode]::BadRequest
+                                $commandOutput = ConvertTo-Json -InputObject @{'error'='Invalid RouteName parameter'}
+                            } else {
                             $Path=$Path.replace('api/','')
                             Write-Log "API received POST request '$Path' from '$RequestUser' - Source IP: '$RequestHost'" -AdditionalFields $RouteName
                             switch ($Path) {
@@ -550,6 +568,7 @@ if ($Configuration) {
                                 'Success' { $statusCode = [System.Net.HttpStatusCode]::OK }
                                 'WinBGP not ready' { $statusCode = [System.Net.HttpStatusCode]::InternalServerError }
                             }
+                            } # End of RouteName validation else block
                         } else {
                             $statusCode = [System.Net.HttpStatusCode]::NotImplemented
                         }
@@ -558,6 +577,12 @@ if ($Configuration) {
                         $statusCode = [System.Net.HttpStatusCode]::NotImplemented
                     }
                 }
+              } catch {
+                # FIX 3.5: Catch request processing errors - log and return 500 instead of crashing the listener
+                Write-Log "API request processing error: $_" -Level Error
+                $statusCode = [System.Net.HttpStatusCode]::InternalServerError
+                $commandOutput = ConvertTo-Json -InputObject @{'error'='Internal server error'}
+              }
             }
             $response = $context.Response
             $response.StatusCode = $statusCode
@@ -574,8 +599,11 @@ if ($Configuration) {
             $output.Write($buffer,0,$buffer.Length)
             $output.Close()
         }
-        if ($listener.IsListening) {
-            $listener.Stop()
+        } finally {
+            # FIX 1.3: Ensure HttpListener is always cleaned up, even on unhandled exception
+            if ($listener.IsListening) {
+                $listener.Stop()
+            }
             $listener.Close()
         }
     } else {
