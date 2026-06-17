@@ -313,13 +313,18 @@ function Write-Log {
         if ($AdditionalFields) {
           $EventInstance = [System.Diagnostics.EventInstance]::new($EventLogId, $EventLogCategory, $Level)
           $NewEvent = [System.Diagnostics.EventLog]::new()
-          $NewEvent.Log = $EventLogName
-          $NewEvent.Source = $EventLogSource
-          [Array] $JoinedMessage = @(
-          $Message
-          $AdditionalFields | ForEach-Object { $_ }
-          )
-          $NewEvent.WriteEvent($EventInstance, $JoinedMessage)
+          # FIX 1.1: EventLog implements IDisposable - use try/finally to prevent handle leak in long-running service
+          try {
+            $NewEvent.Log = $EventLogName
+            $NewEvent.Source = $EventLogSource
+            [Array] $JoinedMessage = @(
+            $Message
+            $AdditionalFields | ForEach-Object { $_ }
+            )
+            $NewEvent.WriteEvent($EventInstance, $JoinedMessage)
+          } finally {
+            $NewEvent.Dispose()
+          }
         } else {
           #Write log to event viewer (Enabled by default)
           Write-EventLog -LogName $EventLogName -Source $EventLogSource -EventId $EventLogId -EntryType $Level -Category $EventLogCategory -Message "$Message"
@@ -359,11 +364,12 @@ Function Send-PipeMessage () {
   $sw = $null   # Stream Writer
   try {
     $pipe = new-object System.IO.Pipes.NamedPipeClientStream(".", $PipeName, $PipeDir, $PipeOpt)
-    $sw = new-object System.IO.StreamWriter($pipe)
+    # FIX: StreamWriter created after Connect() to avoid Dispose() crash on unconnected pipe
     $pipe.Connect(1000)
     if (!$pipe.IsConnected) {
       throw "Failed to connect client to pipe $pipeName"
     }
+    $sw = new-object System.IO.StreamWriter($pipe)
     $sw.AutoFlush = $true
     $sw.WriteLine($Message)
   } catch {
