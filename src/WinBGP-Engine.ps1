@@ -984,9 +984,10 @@ function Start-API() {
 function Stop-API() {
   # Stop API
   Write-Log "Stopping API engine"
-  # Send API stop signal (TO IMPROVE)
+  # Send API stop signal
   try {
-    if ((Invoke-WebRequest -Uri 'http://127.0.0.1:8888/stop' -Method Post -TimeoutSec 5).StatusCode -eq 200) {
+    # FIX: Added -UseBasicParsing to avoid dependency on Internet Explorer engine (not available on Server Core / SYSTEM account)
+    if ((Invoke-WebRequest -Uri 'http://127.0.0.1:8888/stop' -Method Post -TimeoutSec 5 -UseBasicParsing).StatusCode -eq 200) {
       Stop-Job -Name 'API' -ErrorAction SilentlyContinue
       Remove-Job -Name 'API' -Force -ErrorAction SilentlyContinue
     }
