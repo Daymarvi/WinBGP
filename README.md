@@ -132,14 +132,14 @@ flowchart TD
 
 | File | Role |
 | --- | --- |
-| [service/WinBGP-Service.ps1](../service/WinBGP-Service.ps1) | Service bootstrap / SCM integration. Handles `-Setup`, `-Remove`, `-Start`, `-Stop`, `-Status` and the internal `-SCMStart/-SCMStop/...` verbs. Generates the `WinBGP-Service.exe` wrapper. Based on JFLarvoire's `PSService.ps1`. |
-| [src/WinBGP-Engine.ps1](../src/WinBGP-Engine.ps1) | The core engine: main event loop, pipe handler, config validation & hot reload, BGP/IP management, health-check and API thread lifecycle. |
-| [src/WinBGP-API.ps1](../src/WinBGP-API.ps1) | HTTP listener exposing the REST API and the Prometheus `/metrics` endpoint. Based on stevelee's `HttpListener`. |
-| [src/WinBGP-HealthCheck.ps1](../src/WinBGP-HealthCheck.ps1) | Per-route health-check worker with rise/fall debouncing. |
-| [src/WinBGP.ps1](../src/WinBGP.ps1) | The `WinBGP` CLI to query status and drive operations locally (installed as `C:\Program Files\WinBGP\WinBGP.ps1`). |
-| [src/winbgp.json.example](../src/winbgp.json.example) | Example configuration file. |
-| [builder/build.ps1](../builder/build.ps1) | Build script producing the signed MSI via WiX. |
-| [builder/main.wxs](../builder/main.wxs) / [builder/files.wxs](../builder/files.wxs) | WiX packaging definitions. |
+| [service/WinBGP-Service.ps1](service/WinBGP-Service.ps1) | Service bootstrap / SCM integration. Handles `-Setup`, `-Remove`, `-Start`, `-Stop`, `-Status` and the internal `-SCMStart/-SCMStop/...` verbs. Generates the `WinBGP-Service.exe` wrapper. Based on JFLarvoire's `PSService.ps1`. |
+| [src/WinBGP-Engine.ps1](src/WinBGP-Engine.ps1) | The core engine: main event loop, pipe handler, config validation & hot reload, BGP/IP management, health-check and API thread lifecycle. |
+| [src/WinBGP-API.ps1](src/WinBGP-API.ps1) | HTTP listener exposing the REST API and the Prometheus `/metrics` endpoint. Based on stevelee's `HttpListener`. |
+| [src/WinBGP-HealthCheck.ps1](src/WinBGP-HealthCheck.ps1) | Per-route health-check worker with rise/fall debouncing. |
+| [src/WinBGP.ps1](src/WinBGP.ps1) | The `WinBGP` CLI to query status and drive operations locally (installed as `C:\Program Files\WinBGP\WinBGP.ps1`). |
+| [src/winbgp.json.example](src/winbgp.json.example) | Example configuration file. |
+| [builder/build.ps1](builder/build.ps1) | Build script producing the signed MSI via WiX. |
+| [builder/main.wxs](builder/main.wxs) / [builder/files.wxs](builder/files.wxs) | WiX packaging definitions. |
 
 ---
 
@@ -189,7 +189,7 @@ WinBGP -Stop
 
 WinBGP is driven by a single JSON file (`winbgp.json`). The engine validates the
 whole file before (re)loading it; an invalid file aborts the reload and, at
-startup, stops the service. See [src/winbgp.json.example](../src/winbgp.json.example).
+startup, stops the service. See [src/winbgp.json.example](src/winbgp.json.example).
 
 ```jsonc
 {
@@ -473,7 +473,7 @@ Get-EventLog -LogName Application -Source WinBGP -Newest 50
 ## Building the MSI
 
 The MSI is produced with the [WiX Toolset](https://wixtoolset.org/) (v4+) via
-[builder/build.ps1](../builder/build.ps1).
+[builder/build.ps1](builder/build.ps1).
 
 ```powershell
 cd builder
